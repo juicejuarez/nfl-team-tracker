@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { X, Trophy, Clock } from "lucide-react"
+import Image from "next/image"
 
 interface Team {
   id: string
@@ -11,6 +12,35 @@ interface Team {
   logos: Array<{
     href: string
   }>
+}
+
+interface Competitor {
+  homeAway: string
+  team: {
+    displayName: string
+    abbreviation: string
+    logo: string
+  }
+  score?: string
+}
+
+interface Competition {
+  competitors: Competitor[]
+}
+
+interface EventStatus {
+  type: {
+    completed: boolean
+  }
+}
+
+interface Event {
+  id: string
+  date: string
+  name: string
+  shortName: string
+  status: EventStatus
+  competitions: Competition[]
 }
 
 interface Game {
@@ -42,6 +72,22 @@ interface TeamSchedule {
   nextGames: Game[]
 }
 
+interface TeamData {
+  team: Team
+}
+
+interface APIResponse {
+  sports: Array<{
+    leagues: Array<{
+      teams: TeamData[]
+    }>
+  }>
+}
+
+interface ScheduleResponse {
+  events: Event[]
+}
+
 export default function NFLTeamsTable() {
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,8 +107,8 @@ export default function NFLTeamsTable() {
           throw new Error(`HTTP error! status: ${response.status}`)
         }
 
-        const data = await response.json()
-        const teamsData = data.sports[0].leagues[0].teams.map((teamObj: any) => teamObj.team)
+        const data: APIResponse = await response.json()
+        const teamsData = data.sports[0].leagues[0].teams.map((teamObj: TeamData) => teamObj.team)
         setTeams(teamsData)
       } catch (err) {
         console.error("Error fetching teams:", err)
@@ -88,15 +134,18 @@ export default function NFLTeamsTable() {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      const data = await response.json()
+      const data: ScheduleResponse = await response.json()
       const events = data.events || []
 
       const now = new Date()
       const completedGames: Game[] = []
       const upcomingGames: Game[] = []
 
-      events.forEach((event: any) => {
+      events.forEach((event: Event) => {
         const gameDate = new Date(event.date)
+        const homeCompetitor = event.competitions[0]?.competitors?.find((c: Competitor) => c.homeAway === "home")
+        const awayCompetitor = event.competitions[0]?.competitors?.find((c: Competitor) => c.homeAway === "away")
+
         const game: Game = {
           id: event.id,
           date: event.date,
@@ -105,25 +154,19 @@ export default function NFLTeamsTable() {
           completed: event.status?.type?.completed || false,
           homeTeam: {
             team: {
-              displayName:
-                event.competitions[0]?.competitors?.find((c: any) => c.homeAway === "home")?.team?.displayName || "TBD",
-              abbreviation:
-                event.competitions[0]?.competitors?.find((c: any) => c.homeAway === "home")?.team?.abbreviation ||
-                "TBD",
-              logo: event.competitions[0]?.competitors?.find((c: any) => c.homeAway === "home")?.team?.logo || "",
+              displayName: homeCompetitor?.team?.displayName || "TBD",
+              abbreviation: homeCompetitor?.team?.abbreviation || "TBD",
+              logo: homeCompetitor?.team?.logo || "",
             },
-            score: event.competitions[0]?.competitors?.find((c: any) => c.homeAway === "home")?.score,
+            score: homeCompetitor?.score,
           },
           awayTeam: {
             team: {
-              displayName:
-                event.competitions[0]?.competitors?.find((c: any) => c.homeAway === "away")?.team?.displayName || "TBD",
-              abbreviation:
-                event.competitions[0]?.competitors?.find((c: any) => c.homeAway === "away")?.team?.abbreviation ||
-                "TBD",
-              logo: event.competitions[0]?.competitors?.find((c: any) => c.homeAway === "away")?.team?.logo || "",
+              displayName: awayCompetitor?.team?.displayName || "TBD",
+              abbreviation: awayCompetitor?.team?.abbreviation || "TBD",
+              logo: awayCompetitor?.team?.logo || "",
             },
-            score: event.competitions[0]?.competitors?.find((c: any) => c.homeAway === "away")?.score,
+            score: awayCompetitor?.score,
           },
         }
 
@@ -231,13 +274,13 @@ export default function NFLTeamsTable() {
                           className="hover:scale-110 transition-transform cursor-pointer p-2 rounded-lg hover:bg-blue-50"
                           title={`Click to see ${team.displayName} schedule`}
                         >
-                          <img
+                          <Image
                             src={team.logos[0]?.href || "/placeholder.svg"}
                             alt={`${team.displayName} logo`}
-                            className="h-12 w-12 object-contain mx-auto"
-                            onError={(e) => {
-                              e.currentTarget.src = "/placeholder.svg?height=48&width=48"
-                            }}
+                            width={48}
+                            height={48}
+                            className="object-contain mx-auto"
+                            unoptimized
                           />
                         </button>
                       </td>
@@ -259,15 +302,13 @@ export default function NFLTeamsTable() {
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b">
               <div className="flex items-center space-x-4">
-                <img
+                <Image
                   src={selectedTeam.logos[0]?.href || "/placeholder.svg"}
                   alt={`${selectedTeam.displayName} logo`}
-                  className="h-12 w-12 object-contain"
-                  crossOrigin="anonymous"
-                  onError={(e) => {
-                    console.log(`Failed to load logo for ${selectedTeam.displayName}`)
-                    e.currentTarget.src = "/placeholder.svg?height=48&width=48"
-                  }}
+                  width={48}
+                  height={48}
+                  className="object-contain"
+                  unoptimized
                 />
                 <div>
                   <h2 className="text-2xl font-bold">{selectedTeam.displayName}</h2>
@@ -311,14 +352,13 @@ export default function NFLTeamsTable() {
                             </div>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2">
-                                <img
+                                <Image
                                   src={game.awayTeam.team.logo || "/placeholder.svg"}
                                   alt={`${game.awayTeam.team.abbreviation} logo`}
-                                  className="h-6 w-6 object-contain"
-                                  crossOrigin="anonymous"
-                                  onError={(e) => {
-                                    e.currentTarget.src = "/placeholder.svg?height=24&width=24"
-                                  }}
+                                  width={24}
+                                  height={24}
+                                  className="object-contain"
+                                  unoptimized
                                 />
                                 <span className="font-medium">{game.awayTeam.team.abbreviation}</span>
                                 <span className="text-lg font-bold">{game.awayTeam.score || "0"}</span>
@@ -327,14 +367,13 @@ export default function NFLTeamsTable() {
                               <div className="flex items-center space-x-2">
                                 <span className="text-lg font-bold">{game.homeTeam.score || "0"}</span>
                                 <span className="font-medium">{game.homeTeam.team.abbreviation}</span>
-                                <img
+                                <Image
                                   src={game.homeTeam.team.logo || "/placeholder.svg"}
                                   alt={`${game.homeTeam.team.abbreviation} logo`}
-                                  className="h-6 w-6 object-contain"
-                                  crossOrigin="anonymous"
-                                  onError={(e) => {
-                                    e.currentTarget.src = "/placeholder.svg?height=24&width=24"
-                                  }}
+                                  width={24}
+                                  height={24}
+                                  className="object-contain"
+                                  unoptimized
                                 />
                               </div>
                             </div>
@@ -362,13 +401,27 @@ export default function NFLTeamsTable() {
                             </div>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2">
-                                <img src={game.awayTeam.team.logo || "/placeholder.svg"} alt="" className="h-6 w-6" />
+                                <Image
+                                  src={game.awayTeam.team.logo || "/placeholder.svg"}
+                                  alt={`${game.awayTeam.team.abbreviation} logo`}
+                                  width={24}
+                                  height={24}
+                                  className="object-contain"
+                                  unoptimized
+                                />
                                 <span className="font-medium">{game.awayTeam.team.abbreviation}</span>
                               </div>
                               <span className="text-gray-500">@</span>
                               <div className="flex items-center space-x-2">
                                 <span className="font-medium">{game.homeTeam.team.abbreviation}</span>
-                                <img src={game.homeTeam.team.logo || "/placeholder.svg"} alt="" className="h-6 w-6" />
+                                <Image
+                                  src={game.homeTeam.team.logo || "/placeholder.svg"}
+                                  alt={`${game.homeTeam.team.abbreviation} logo`}
+                                  width={24}
+                                  height={24}
+                                  className="object-contain"
+                                  unoptimized
+                                />
                               </div>
                             </div>
                           </div>
